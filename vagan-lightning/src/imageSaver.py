@@ -44,18 +44,3 @@ class Saver:
         tiff.imsave(path, imgMap)
         path = saveFolder + '/output_samples_' + nameAddition + '_' + str(epoch) + '.tif'
         tiff.imsave(path, imgOut)
-
-    def saveSanity(sanity, saveFolder, epoch, nameAddition):
-
-        path = saveFolder + '/map_samples_' + nameAddition + '_' + str(epoch) + '.tif'
-        tiff.imsave(path, sanity)
-
-        rgbSanity = np.zeros((np.shape(sanity)[-2],np.shape(sanity)[-1],3), dtype=np.uint8)
-        rgbSanity[..., 0] = sanity[0, -3, ...] * 256
-        rgbSanity[..., 1] = sanity[0, -2, ...] * 256
-        rgbSanity[..., 2] = sanity[0, -1, ...] * 256
-
-        imgSanity = Image.fromarray(rgbSanity)
-
-        path = saveFolder + '/sanity_samplesHE_' + nameAddition + '_' + str(epoch) + '.png'
-        imgSanity.save(path)
