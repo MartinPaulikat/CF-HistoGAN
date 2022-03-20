@@ -85,12 +85,10 @@ class UNet(nn.Module):
         xu1 = self.up1(x6)
         cat1 = crop_and_concat(xu1, x0)
         x7 = self.conv7(cat1)
-        x8 = self.tanh(x7)
 
-        if sigmoid == True:
-            x9 = self.sigmoid(torch.add(x8,x))
-            x10 = torch.subtract(x9,x)
+        if sigmoid:
+            x8 = self.sigmoid(torch.add(x7,x))
         else:
-            x10 = x8
+            x8 = self.tanh(x7)
 
-        return x10
+        return x8
