@@ -5,12 +5,13 @@ import shutil
 import torch
 import torch.backends.cudnn as cudnn
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning import Trainer
+from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from parserNet import get_parser
 from crcDataLoader import CRCLightningLoader
 from vagan import VaGAN
+from pytorch_lightning.callbacks import LearningRateMonitor
 
 def init_seed(opt):
         '''
@@ -43,31 +44,30 @@ def main():
 
     options = get_parser().parse_args()
 
-    wandBLogger = WandbLogger(project=options.project, name=options.logname)
-
+    #you can also use Tensorboard or other by pythorch lightning supported logger
+    logger = WandbLogger(project=options.project, name=options.logname)
+    lr_monitor = LearningRateMonitor(logging_interval='epoch')
     if not options.pretrained:
         init_experiment(options)
-    init_seed(options)
+    #init_seed(options)
+    seed_everything(42, workers=True)
 
     #LAMBDA
     LAMBDA = 10
 
-    dataloader = CRCLightningLoader(options)
+    dataloader = CRCLightningLoader(options, options.data)
 
     model = VaGAN(options, LAMBDA)
 
     #model saver
     checkpoint_callback = ModelCheckpoint(
-        every_n_epochs=50,
         dirpath=options.experiment + '/models',
-        filename="model-{epoch:02d}",
-        save_top_k=10,
-        monitor="val/total_loss"
+        save_last=True
     )
 
     trainer = Trainer(
-        logger=wandBLogger,
-        callbacks=[checkpoint_callback],
+        logger=logger,
+        callbacks=[checkpoint_callback, lr_monitor],
         max_epochs=options.nepochs,
         gpus=options.numberGraphics,
         enable_checkpointing=True,
@@ -75,6 +75,7 @@ def main():
         num_sanity_val_steps=0,
     )
 
+    #train the network
     trainer.fit(model, datamodule=dataloader)
 
 if __name__ == '__main__':

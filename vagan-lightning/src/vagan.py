@@ -1,3 +1,4 @@
+from tkinter import ON
 from pytorch_lightning import LightningModule
 import torch
 import torch.optim as optim
@@ -7,6 +8,7 @@ from models.mask_generators import UNet
 import tifffile as tiff
 from imageSaver import Saver
 import numpy as np
+import csv
 
 class VaGAN(LightningModule):
     def __init__(
@@ -64,16 +66,33 @@ class VaGAN(LightningModule):
         '''
         optimizer_g = optim.Adam(net_g.parameters(), lr=opt.learning_rate_g, betas=(
             opt.beta1, 0.9), weight_decay=1e-5)
-        optimizer_d = optim.Adam(net_d.parameters(), lr=opt.learning_rate_g, betas=(
+        optimizer_d = optim.Adam(net_d.parameters(), lr=opt.learning_rate_d, betas=(
             opt.beta1, 0.9), weight_decay=1e-5)
 
         return optimizer_g, optimizer_d
 
     def configure_optimizers(self):
+        '''
+        gen_sch = {
+            'scheduler': torch.optim.lr_scheduler.MultiStepLR(self.optimizer_g, [400, 800], 0.1),
+            'interval': 'epoch'
+        }
+        disc_sch = {
+            'scheduler': torch.optim.lr_scheduler.MultiStepLR(self.optimizer_d, [400, 800], 0.1),
+            'interval': 'epoch'
+        }
+        
+        return (
+            {'optimizer':self.optimizer_g, 'frequency': 1, 'lr_scheduler':gen_sch},
+            {'optimizer':self.optimizer_d, 'frequency': 100, 'lr_scheduler':disc_sch},
+        )
+        '''
+        
         return (
             {'optimizer':self.optimizer_g, 'frequency': 1},
             {'optimizer':self.optimizer_d, 'frequency': 100},
         )
+        
 
     #function taken from: https://github.com/Adi-iitd/AI-Art/blob/6969e0a64bdf6a70aa741c29806fc148de93595c/src/CycleGAN/CycleGAN-PL.py#L680
     @staticmethod
@@ -137,7 +156,11 @@ class VaGAN(LightningModule):
 
         # train with sum (anomaly + anomaly map)
         anomaly_map = generator(inputToBeFaked, sigmoid=opt.sigmoid)
-        img_sum = inputToBeFaked + anomaly_map
+
+        if opt.sigmoid:
+            img_sum = anomaly_map
+        else:
+            img_sum = inputToBeFaked + anomaly_map
         
         err_d_anomaly_map = discriminator(img_sum)
         cri_loss = self.discriminatorLoss(err_d_real, err_d_anomaly_map)
@@ -150,7 +173,12 @@ class VaGAN(LightningModule):
     def trainStepG(self, inputImage, net_g, discriminator, opt, LAMBDA):
 
         anomaly_map = net_g(inputImage, sigmoid=opt.sigmoid)
-        output = anomaly_map + inputImage
+
+        if opt.sigmoid:
+            output = anomaly_map
+            anomaly_map = output - inputImage
+        else:
+            output = anomaly_map + inputImage
 
         gen_loss = self.generatorLoss(anomaly_map, output, discriminator, LAMBDA)
 
@@ -211,6 +239,8 @@ class VaGAN(LightningModule):
         self.log('train/g_mean_loss', g_loss, on_epoch=True)
         self.log('train/d_mean_loss', d_loss, on_epoch=True)
 
+        
+
         self.losses.append(avg_loss)
         self.G_mean_losses.append(g_loss)
         self.D_mean_losses.append(d_loss)
@@ -232,10 +262,18 @@ class VaGAN(LightningModule):
 
             oneImage = torch.reshape(oneImage, (1, self.opt.channels_number, np.shape(oneImage)[-2], np.shape(oneImage)[-1]))
             oneImageMap = self.net_g(oneImage, sigmoid=self.opt.sigmoid)
+
+            if self.opt.sigmoid:
+                oneImageMap = oneImageMap - oneImage
             
             #save these tensors on to the server
-            Saver.saveAsPng(oneImage.cpu().detach().numpy(), oneImageMap.cpu().detach().numpy(), self.opt.experiment + '/images', self.step, 'forward', self.first)
+            Saver.saveHEAsTiff(oneImage.cpu().detach().numpy(), oneImageMap.cpu().detach().numpy(), self.opt.experiment + '/images', self.step, 'forward', self.first)
             Saver.saveAsTiff(oneImage.cpu().detach().numpy(), oneImageMap.cpu().detach().numpy(), self.opt.experiment + '/images', self.step, 'forward', self.first)
+
+            #print the Disc losses as csv with corresponding epoch. Only for experiments
+            csvFile = open(self.opt.experiment + '/discLoss.csv' , 'a')
+            writer = csv.writer(csvFile)
+            writer.writerow([self.step, d_loss])
 
             if self.first:
                 self.first = False
@@ -247,13 +285,13 @@ class VaGAN(LightningModule):
         anomaly, healthy = batch
 
         #forward generator
-        err_g = self.trainStepG(anomaly, self.net_g, self.net_d, self.opt, self.LAMBDA)
+        err_g = self.trainStepG(anomaly, self.net_g, self.net_d, self.opt, self.LAMBDA_NORM)
 
         #forward discriminator
         err_d  = self.trainStepD(anomaly, healthy, self.net_d, self.net_g, self.opt, self.LAMBDA, calc_grad=False)
 
 
-        val_avg_loss = err_d + err_g / 2
+        val_avg_loss = (err_d + err_g) / 2
 
         self.log('val/total_loss', val_avg_loss, on_epoch=True)
         self.log('val/g_loss', err_g, on_epoch=True)

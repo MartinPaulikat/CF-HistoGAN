@@ -59,6 +59,11 @@ def get_parser():
                         help='folder of the preprocessed data',
                         default='../../data/Preprocessed')
 
+    parser.add_argument('-datFu', '--dataFull',
+                        type=str,
+                        help='folder of the preprocessed full image data',
+                        default='../../data/Preprocessed')
+
     parser.add_argument('-exp', '--experiment',
                         type=str,
                         help='directory in where samples and models will be saved',

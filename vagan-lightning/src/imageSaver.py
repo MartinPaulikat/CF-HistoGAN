@@ -44,3 +44,18 @@ class Saver:
         tiff.imsave(path, imgMap)
         path = saveFolder + '/output_samples_' + nameAddition + '_' + str(epoch) + '.tif'
         tiff.imsave(path, imgOut)
+
+    def saveHEAsTiff(InputTensor, MapTensor, saveFolder, epoch, nameAddition, first):
+
+        imgIn = np.array(InputTensor)
+        imgMap = np.array(MapTensor)
+        imgOut = imgIn + imgMap
+
+        #save the input only if it is the first call of this function
+        if first:
+            path = saveFolder + '/input_samples_HE_' + nameAddition + '.tif'
+            tiff.imsave(path, imgIn[0, -3:, ...])
+        path = saveFolder + '/map_samples_HE_' + nameAddition + '_' + str(epoch) + '.tif'
+        tiff.imsave(path, imgMap[0, -3:, ...])
+        path = saveFolder + '/output_samples_HE_' + nameAddition + '_' + str(epoch) + '.tif'
+        tiff.imsave(path, imgOut[0, -3:, ...])
