@@ -39,7 +39,7 @@ def init_experiment(opt):
 
 
 def main():
-    #important to save things on the slurm server. Delete it if you dont use slurm
+    #important to save things on the slurm server. Delete the follwoing line if you dont use slurm
     del os.environ["SLURM_JOB_NAME"]
 
     options = get_parser().parse_args()
@@ -50,15 +50,12 @@ def main():
     if not options.pretrained:
         init_experiment(options)
         init_seed(options)
-    #init_seed(options)
-    seed_everything(42, workers=True)
 
-    #LAMBDA
-    LAMBDA = 10
+    seed_everything(42, workers=True)
 
     dataloader = CRCLightningLoader(options, options.data)
 
-    model = VaGAN(options, LAMBDA)
+    model = VaGAN(options)
 
     #model saver
     checkpoint_callback = ModelCheckpoint(

@@ -79,22 +79,6 @@ class VaGAN(LightningModule):
         return optimizer_g, optimizer_d
 
     def configure_optimizers(self):
-        
-        '''
-        gen_sch = {
-            'scheduler': torch.optim.lr_scheduler.MultiStepLR(self.optimizer_g, [200, 400], 0.1),
-            'interval': 'epoch'
-        }
-        disc_sch = {
-            'scheduler': torch.optim.lr_scheduler.MultiStepLR(self.optimizer_d, [200, 400], 0.1),
-            'interval': 'epoch'
-        }
-        
-        return (
-            {'optimizer':self.optimizer_g, 'frequency': 1, 'lr_scheduler':gen_sch},
-            {'optimizer':self.optimizer_d, 'frequency': 100, 'lr_scheduler':disc_sch},
-        )
-        '''
         return (
             {'optimizer':self.optimizer_g, 'frequency': 1},
             {'optimizer':self.optimizer_d, 'frequency': 100},
@@ -308,7 +292,6 @@ class VaGAN(LightningModule):
                 dataRealNumpy = dataReal.cpu().detach().numpy()
                 dataToFakeNumpy = dataToFake.cpu().detach().numpy()
 
-
                 for image in range(anomalyMapNumpy.shape[0]):
                     for channel in range(anomalyMapNumpy.shape[1]):
                         self.meansOut[self.i2, channel] += np.mean(anomalyMapNumpy[image, channel] + dataToFakeNumpy[image, channel])
@@ -321,7 +304,6 @@ class VaGAN(LightningModule):
 
             else:
                 err_d = self.trainStepD(dataToFake, dataReal, self.net_d, self.net_g, self.opt, self.LAMBDA)
-
 
             self.trainStep += 1
 
@@ -340,8 +322,6 @@ class VaGAN(LightningModule):
         self.log('train/total_loss', avg_loss, on_epoch=True)
         self.log('train/g_mean_loss', g_loss, on_epoch=True)
         self.log('train/d_mean_loss', d_loss, on_epoch=True)
-
-        
 
         self.losses.append(avg_loss)
         self.G_mean_losses.append(g_loss)
@@ -375,8 +355,6 @@ class VaGAN(LightningModule):
             oneImageLoss = self.net_d(oneImageMap + oneImage).mean()
             oneImageLossL1 = torch.abs(oneImageMap).mean()
 
-
-            
             #save these tensors on to the server
             Saver.saveHEAsTiff(oneImage.cpu().detach().numpy(), oneImageMap.cpu().detach().numpy(), self.opt.experiment + '/images', self.step, 'forward', self.first)
             Saver.saveAsTiff(oneImage.cpu().detach().numpy(), oneImageMap.cpu().detach().numpy(), self.opt.experiment + '/images', self.step, 'forward', self.first)
@@ -398,9 +376,6 @@ class VaGAN(LightningModule):
             csvFile = open(self.opt.experiment + '/energyDistance.csv' , 'a')
             writer = csv.writer(csvFile)
             writer.writerow([self.step, ed, p])
-
-
-
 
             if self.first:
                 self.first = False
