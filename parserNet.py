@@ -26,7 +26,7 @@ def get_parser():
 
     parser.add_argument('-ch', '--channel',
                         type=int,
-                        help='Only use with channel size 1. States which channel is used.',
+                        help='States which channel is used if you only want to transform a single channel.',
                         default=None)
 
     parser.add_argument('-ep', '--epoch',
