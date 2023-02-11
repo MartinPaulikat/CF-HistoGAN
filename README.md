@@ -1,6 +1,6 @@
 # CF-HistoGAN
 
-Implementation of the CF-HistoGAN. The code is written in pytorch-lightning, a lightweight wrapper for pythorch.
+Implementation of the CF-HistoGAN. The code is written in pytorch-lightning, a lightweight wrapper for pytorch.
 
 This method is based on the VAGAN by Baumgartner, C.F. et al. (2018), with implementation available on GitHub at https://github.com/baumgach/vagan-code.
 
