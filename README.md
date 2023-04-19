@@ -25,4 +25,4 @@ A bunch of scripts that can be used to evaluate and visualize the results:
 
 - multiNetColoring.py colores the channels with the highest absolute changes and composites them into a plot.
 
-- multiNetHE visualizes the artifically generated HE images.
+- multiNetHE.py visualizes the artifically generated HE images.
