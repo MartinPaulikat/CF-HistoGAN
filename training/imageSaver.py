@@ -1,61 +1,97 @@
-import tifffile as tiff
 import numpy as np
 from PIL import Image
+import os
+import pytorch_lightning as pl
+import wandb
+import torchvision.transforms as transforms
 
 #saves torch tensors as tiff or png at the experiment folder
-class Saver:
-    def saveAsPng(InputTensor, MapTensor, saveFolder, epoch, nameAddition, first):
+class Saver(pl.LightningModule):
+    def saveAsPng(InputTensor, MapTensor, saveFolder, imageNumber, mode, sigmoid, epoch=None, first=None):
 
-        rgbInput = np.zeros((np.shape(InputTensor)[-2],np.shape(InputTensor)[-1],3), dtype=np.uint8)
-        rgbInput[..., 0] = InputTensor[0, -3, ...] * 256
-        rgbInput[..., 1] = InputTensor[0, -2, ...] * 256
-        rgbInput[..., 2] = InputTensor[0, -1, ...] * 256
+        InputTensor = InputTensor.cpu().detach().numpy()
+        MapTensor = MapTensor.cpu().detach().numpy()
 
-        imgIn = Image.fromarray(rgbInput)
+        if sigmoid:
+            map = (MapTensor - InputTensor)*255
+            mapPos = map.copy()
+            mapPos[mapPos < 0] = 0
+            mapNeg = map.copy()
+            mapNeg[mapNeg > 0] = 0
+            #imgMapPos are all the values that are positive
+            imgMapPos = Image.fromarray(mapPos.astype(np.uint8).transpose(1, 2, 0))
+            imgMapNeg = Image.fromarray(mapNeg.astype(np.uint8).transpose(1, 2, 0))
+            imgOut = Image.fromarray((MapTensor*255).astype(np.uint8).transpose(1, 2, 0))
+        else:
+            map = MapTensor*255
+            mapPos = map.copy()
+            mapPos[mapPos < 0] = 0
+            mapNeg = map.copy()
+            mapNeg[mapNeg > 0] = 0
+            out = MapTensor + InputTensor
+            out[out > 1] = 1
+            out[out < 0] = 0
+            imgMapPos = Image.fromarray(mapPos.astype(np.uint8).transpose(1, 2, 0))
+            imgMapNeg = Image.fromarray(mapNeg.astype(np.uint8).transpose(1, 2, 0))
+            imgOut = Image.fromarray((out*255).astype(np.uint8).transpose(1, 2, 0))
+            
+        imgIn = Image.fromarray((InputTensor*255).astype(np.uint8).transpose(1, 2, 0))
 
-        rgbMap = np.zeros((np.shape(InputTensor)[-2],np.shape(InputTensor)[-1],3), dtype=np.uint8)
-        rgbMap[..., 0] = MapTensor[0, -3, ...] * 256
-        rgbMap[..., 1] = MapTensor[0, -2, ...] * 256
-        rgbMap[..., 2] = MapTensor[0, -1, ...] * 256
+        if mode == 'train' or mode == 'eval':
+            #save the input only if it is the first call of this function
+            if first:
+                os.makedirs(saveFolder + mode + '/input/', exist_ok=True)
+                path = saveFolder + mode + '/input/' + imageNumber + '.png'
+                imgIn.save(path)
+            os.makedirs(saveFolder + mode + '/' + str(epoch) + '/out', exist_ok=True)
+            os.makedirs(saveFolder + mode + '/' + str(epoch) + '/mapPos', exist_ok=True)
+            os.makedirs(saveFolder + mode + '/' + str(epoch) + '/mapNeg', exist_ok=True)
+            path = saveFolder + mode + '/' + str(epoch) + '/mapPos/' + imageNumber + '.png'
+            imgMapPos.save(path)
+            path = saveFolder + mode + '/' + str(epoch) + '/mapNeg/' + imageNumber + '.png'
+            imgMapNeg.save(path)
+            path = saveFolder + mode + '/' + str(epoch) + '/out/' + imageNumber + '.png'
+            imgOut.save(path)
+        else:
+            #create the test folder
+            os.makedirs(saveFolder + 'test/input', exist_ok=True)
+            os.makedirs(saveFolder + 'test/mapPos', exist_ok=True)
+            os.makedirs(saveFolder + 'test/mapNeg', exist_ok=True)
+            os.makedirs(saveFolder + 'test/out', exist_ok=True)
 
-        imgMap = Image.fromarray(rgbMap)
-        imgOut = Image.fromarray(rgbInput + rgbMap)
-
-        #save the input only if it is the first call of this function
-        if first:
-            path = saveFolder + '/input_samplesHE_' + nameAddition + '.png'
+            #save the input only if it is the first call of this function
+            path = saveFolder + 'test/input/' + imageNumber + '.png'
             imgIn.save(path)
-        path = saveFolder + '/map_samplesHE_' + nameAddition + '_' + str(epoch) + '.png'
-        imgMap.save(path)
-        path = saveFolder + '/output_samplesHE_' + nameAddition + '_' + str(epoch) + '.png'
-        imgOut.save(path)
+            path = saveFolder + 'test/mapPos/' + imageNumber + '.png'
+            imgMapPos.save(path)
+            path = saveFolder + 'test/mapNeg/' + imageNumber + '.png'
+            imgMapNeg.save(path)
+            path = saveFolder + 'test/out/' + imageNumber + '.png'
+            imgOut.save(path)
 
-    def saveAsTiff(InputTensor, MapTensor, saveFolder, epoch, nameAddition, first):
+    def saveToLogger(InputTensor, MapTensor, logger, epoch, sigmoid, first=None):
+        #downsample the images to 256x256 using torchvision.transforms.Resize
+        downsample = transforms.Resize([256, 256])
+        InputTensor = downsample(InputTensor)
+        MapTensor = downsample(MapTensor)
 
-        imgIn = np.array(InputTensor)
-        imgMap = np.array(MapTensor)
-        imgOut = imgIn + imgMap
+        InputTensor = InputTensor.cpu().detach().numpy()
+        MapTensor = MapTensor.cpu().detach().numpy()        
 
-        #save the input only if it is the first call of this function
+        if sigmoid:
+            imgOut = Image.fromarray((MapTensor*255).astype(np.uint8).transpose(1, 2, 0))
+            imgMap = Image.fromarray(((MapTensor - InputTensor)*255).astype(np.uint8).transpose(1, 2, 0))
+        else:
+            output = MapTensor + InputTensor
+            output[output > 1] = 1
+            output[output < 0] = 0
+
+            imgMap = Image.fromarray((MapTensor*255).astype(np.uint8).transpose(1, 2, 0))
+            imgOut = Image.fromarray((output*255).astype(np.uint8).transpose(1, 2, 0))
+            
+        imgIn = Image.fromarray((InputTensor*255).astype(np.uint8).transpose(1, 2, 0))
+        
         if first:
-            path = saveFolder + '/input_samples_' + nameAddition + '.tif'
-            tiff.imsave(path, imgIn)
-        path = saveFolder + '/map_samples_' + nameAddition + '_' + str(epoch) + '.tif'
-        tiff.imsave(path, imgMap)
-        path = saveFolder + '/output_samples_' + nameAddition + '_' + str(epoch) + '.tif'
-        tiff.imsave(path, imgOut)
-
-    def saveHEAsTiff(InputTensor, MapTensor, saveFolder, epoch, nameAddition, first):
-
-        imgIn = np.array(InputTensor)
-        imgMap = np.array(MapTensor)
-        imgOut = imgIn + imgMap
-
-        #save the input only if it is the first call of this function
-        if first:
-            path = saveFolder + '/input_samples_HE_' + nameAddition + '.tif'
-            tiff.imsave(path, imgIn[0, -3:, ...])
-        path = saveFolder + '/map_samples_HE_' + nameAddition + '_' + str(epoch) + '.tif'
-        tiff.imsave(path, imgMap[0, -3:, ...])
-        path = saveFolder + '/output_samples_HE_' + nameAddition + '_' + str(epoch) + '.tif'
-        tiff.imsave(path, imgOut[0, -3:, ...])
+            logger.logger.experiment.log({"input_sample": wandb.Image(imgIn)}, step=epoch)
+        logger.logger.experiment.log({"map_sample": wandb.Image(imgMap)}, step=epoch)
+        logger.logger.experiment.log({"output_sample": wandb.Image(imgOut)}, step=epoch)

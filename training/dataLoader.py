@@ -1,206 +1,107 @@
 '''
 author: Martin Paulikat
-Data loader for Crc and ctcl data. 
+Data loader. 
 '''
-
-from pathlib import Path
-import numpy as np
-import tifffile as tiff
-import torch
 from pytorch_lightning import LightningDataModule
+from torch.utils.data import DataLoader, Dataset
 import os
+import random
+from PIL import Image
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
-class prep():
-    def __init__(self, dataFolder, trainPerc, evalPerc, testPerc, batchsize=32, useTorch=False):
-        self.pathDict = dict()
-        self.drawListTrainGroup0 = []
-        self.drawListEvalGroup0 = []
-        self.drawListTestGroup0 = []
-        self.drawListTrainGroup1 = []
-        self.drawListEvalGroup1 = []
-        self.drawListTestGroup1 = []
-        self.useTorch = useTorch
+import numpy as np
+import torch
 
-        self.loadDataList(dataFolder)
-        self.createRandomDrawList(trainPerc, evalPerc, testPerc)
+class RandomPairedImageFolder(Dataset):
+    def __init__(self, root, transform=None):
+        self.normal_dir = os.path.join(root, 'normal')
+        self.abnormal_dir = os.path.join(root, 'abnormal')
+        self.normal_images = os.listdir(self.normal_dir)
+        self.abnormal_images = os.listdir(self.abnormal_dir)
+        self.root = root
 
-        #create the pytorch dataloader objects
-        setTrainGroup = dataLoader(self.drawListTrainGroup0, self.drawListTrainGroup1, useTorch = self.useTorch)
-        setEvalGroup = dataLoader(self.drawListEvalGroup0, self.drawListEvalGroup1, useTorch = self.useTorch)
-        setTestGroup = dataLoader(self.drawListTestGroup0, self.drawListTestGroup1, useTorch = self.useTorch)
-        
-        self.loaderTrainGroup = torch.utils.data.DataLoader(setTrainGroup, batch_size=batchsize,
-                                            shuffle=False, drop_last=True, num_workers=8)
-
-        self.loaderEvalGroup = torch.utils.data.DataLoader(setEvalGroup, batch_size=batchsize,
-                                            shuffle=False, drop_last=True, num_workers=8)
-
-        self.loaderTestGroup = torch.utils.data.DataLoader(setTestGroup, batch_size=batchsize,
-                                            shuffle=False, drop_last=True, num_workers=8)
-
-
-    def returnLoaders(self):
-        return self.loaderTrainGroup, self.loaderEvalGroup, self.loaderTestGroup
-
-    def createDrawList(self, group):
-        #we only need samples of Group0
-        drawListGroup0 = []
-        #iterate through dict
-        for key in self.pathDict:
-            #get the label
-            label = self.pathDict[key][0]
-            #iterate through the images and seperate them into 2 groups (based on label)
-            for imagePath in self.pathDict[key][1]:
-                if int(label) == group:
-                    drawListGroup0.append(imagePath)
-
-        #everything is saved into drawListTrainGroup0
-        self.drawListTrainGroup0 = drawListGroup0
-
-    def getNumberOfSamples(self, listName):
-        '''
-        input:
-        listName: name of the list. It can be train, eval, test, or total
-        returns the number of samples
-        '''
-        if listName == 'train':
-            return np.shape(self.drawListTrain)[0]
-        elif listName == 'eval':
-            return np.shape(self.drawListEval)[0]
-        elif listName == 'test':
-            return np.shape(self.drawListTest)[0]
-        elif listName == 'total':
-            return np.shape(self.drawListTest)[0] + np.shape(self.drawListEval)[0] + np.shape(self.drawListTrain)[0]
-
-
-    def createRandomDrawList(self, trainSize, evalSize, testSize):
-        '''
-        input:
-        trainSize: size of the training data set in percent
-        evalSize: size of the evaluation data set in percent
-        testSize: size of the test data set in percent
-        fills a random list in the follwing form: [patient, sample, label]
-        creates a list for training, evaluation and testing
-        '''
-        drawListGroup0 = []
-        drawListGroup1 = []
-        #iterate through dict
-        for key in self.pathDict:
-            #get the label
-            label = self.pathDict[key][0]
-            #iterate through the images and seperate them into 2 groups (based on label)
-            for imagePath in self.pathDict[key][1]:
-                if int(label) == 0:
-                    drawListGroup0.append(imagePath)
-                elif int(label) == 1:
-                    drawListGroup1.append(imagePath)
-        #seed for randomness
-        np.random.seed(0)
-        #shuffle both lists
-        np.random.shuffle(drawListGroup0)
-        np.random.shuffle(drawListGroup1)
-        #get the length of the lists
-        lengthGroup0 = len(drawListGroup0)
-        lengthGroup1 = len(drawListGroup1)
-        #both lists need to have the same size, so take the smaller size
-        lengthGroups = min(lengthGroup0, lengthGroup1)
-        #calculate the number of samples for each group
-        trainLength = trainSize*lengthGroups//100
-        evalLength = evalSize*lengthGroups//100
-        testLength = testSize*lengthGroups//100
-        #seperate both lists into train, eval and test
-        self.drawListTrainGroup0 = drawListGroup0[0:trainLength]
-        self.drawListEvalGroup0 = drawListGroup0[trainLength:trainLength + evalLength]
-        self.drawListTestGroup0 = drawListGroup0[trainLength + evalLength:trainLength + evalLength + testLength]
-        self.drawListTrainGroup1 = drawListGroup1[0:trainLength]
-        self.drawListEvalGroup1 = drawListGroup1[trainLength:trainLength + evalLength]
-        self.drawListTestGroup1= drawListGroup1[trainLength + evalLength:trainLength + evalLength + testLength]
-   
-    def loadDataList(self, inputFolder):
-        path = Path(inputFolder)
-        subPath = [Path(folder) for folder in path.iterdir() if folder.is_dir()]
-
-        if self.useTorch:
-            for item in subPath:
-                #get the label
-                labelPath = [str(file) for file in item.iterdir() if file.suffix == '.txt']
-                with open(labelPath[0]) as f:
-                    label = f.read()
-                #get the patient number
-                patient = item.parts[-1]
-                #get the dataPath
-                dataPath = [str(file) for file in item.iterdir() if file.suffix == '.pt']
-                #add to dict
-                self.pathDict[patient] = [label, dataPath]
-        else:
-            for item in subPath:
-                #get the label
-                labelPath = [str(file) for file in item.iterdir() if file.suffix == '.txt']
-                with open(labelPath[0]) as f:
-                    label = f.read()
-                #get the patient number
-                patient = item.parts[-1]
-                #get the dataPath
-                dataPath = [str(file) for file in item.iterdir() if file.suffix == '.tif']
-                #add to dict
-                self.pathDict[patient] = [label, dataPath]
-
-
-class dataLoader(torch.utils.data.Dataset):
-    def __init__(self, dataForward, dataBackward, transform=None, useTorch=False):
-        self.dataForward = dataForward
-        self.dataBackward = dataBackward
         self.transform = transform
-        self.useTorch = useTorch
-        
+
+        random.shuffle(self.normal_images)
+        random.shuffle(self.abnormal_images)
+
+    def square_crop(self, image):
+        width, height = image.shape[1], image.shape[0]
+        dim = [height, width]
+        #process crop width and height for max available dimension
+        crop_width = dim[0] if dim[0]<image.shape[1] else image.shape[1]
+        crop_height = dim[1] if dim[1]<image.shape[0] else image.shape[0] 
+        mid_x, mid_y = int(width/2), int(height/2)
+        cw2, ch2 = int(crop_width/2), int(crop_height/2) 
+        crop_img = image[mid_y-ch2:mid_y+ch2, mid_x-cw2:mid_x+cw2]
+
+        return crop_img
+
+    def __getitem__(self, index):
+        # Pair images based on the shuffled lists
+        root = os.path.join(self.root, 'images')
+        normal_image_path = os.path.join(root, self.normal_images[index % len(self.normal_images)])
+        abnormal_image_path = os.path.join(root, self.abnormal_images[index % len(self.abnormal_images)])
+
+        normal_image = Image.open(normal_image_path).convert('RGB')
+        abnormal_image = Image.open(abnormal_image_path).convert('RGB')
+        #transform the images to numpy arrays
+        normal_image = np.array(normal_image)
+        abnormal_image = np.array(abnormal_image)
+
+        normal_image = self.square_crop(normal_image)
+        abnormal_image = self.square_crop(abnormal_image)
+
+        if self.transform is not None:
+            normal_image = self.transform(image=normal_image)["image"]
+            abnormal_image = self.transform(image=abnormal_image)["image"]
+            
+        #divide by 255 to normalize between 0 and 1
+        #normal_image = normal_image / 255
+        #abnormal_image = abnormal_image / 255
+
+        normal_image = normal_image.to(dtype=torch.float32)
+        abnormal_image = abnormal_image.to(dtype=torch.float32)
+
+        return normal_image, abnormal_image
+
     def __len__(self):
-        return min([len(self.dataForward), len(self.dataBackward)])
+        return min(len(self.normal_images), len(self.abnormal_images))
 
-    def __getitem__(self, idx):
-        pathForward = self.dataForward[idx]
-        pathBackward = self.dataBackward[idx]
-
-        if self.useTorch:
-            X = torch.load(pathForward)
-            Y = torch.load(pathBackward)
-        else:
-            imageForward = tiff.imread(pathForward)
-            X = torch.from_numpy(imageForward)
-
-            imageBackward = tiff.imread(pathBackward)
-            Y = torch.from_numpy(imageBackward)
-
-        if X.shape[0] == 1:
-            X = torch.reshape(X, (1, 128, 128))
-            Y = torch.reshape(Y, (1, 128, 128))
-
-        if self.transform:
-            X = self.transform(X)
-            Y = self.transform(Y)
-
-        return X, Y
+    def on_epoch_end(self):
+        # Shuffle the lists again at the end of each epoch
+        self.normal_images = random.shuffle(self.normal_images)
+        self.abnormal_images = random.shuffle(self.abnormal_images)
 
 class lightningLoader(LightningDataModule):
-    def __init__(self, options, data):
+    def __init__(self, data_dir: str = "path/to/dir", batch_size: int = 32):
         super().__init__()
-        self.opt = options
-        self.data = data
+        self.data_dir = data_dir
+        self.batch_size = batch_size
 
-    def prepare_data(self):
-        dataObject = prep(self.data, self.opt.train, self.opt.eval, self.opt.test, batchsize=self.opt.batch_size, useTorch=self.opt.torch)
-        trainGroup, evalGroup, testGroup = dataObject.returnLoaders()
-        self.trainDataLoader = trainGroup
-        if self.opt.eval == 0:
-            self.evalDataLoader = None
-        else:
-            self.evalDataLoader = evalGroup
-        self.testDataLoader = testGroup
+    def setup(self, stage: str):
+        self.transform = A.Compose([
+            #do random crop if you didnt split the data into patches beforehand
+            #A.RandomCrop(256, 256),
+            ToTensorV2(),
+        ])
+        self.testTransform = A.Compose([
+            A.PadIfNeeded(min_height=None, min_width=None, pad_height_divisor=32, pad_width_divisor=32),
+            ToTensorV2(),
+        ])
+
+        self.paired_dataset = RandomPairedImageFolder(root=self.data_dir, transform=self.transform)
+        self.test_dataset = RandomPairedImageFolder(root=self.data_dir, transform=self.testTransform)
 
     def train_dataloader(self):
-        return self.trainDataLoader
+        return DataLoader(self.paired_dataset, batch_size=self.batch_size, num_workers=11)
 
     def val_dataloader(self):
-        return self.evalDataLoader
+        return DataLoader(self.test_dataset, batch_size=1, num_workers=11)
 
     def test_dataloader(self):
-        return self.testDataLoader
+        return DataLoader(self.test_dataset, batch_size=1, num_workers=11)
+
+    def predict_dataloader(self):
+        return DataLoader(self.test_dataset, batch_size=1)

@@ -1,18 +1,17 @@
 import argparse
 
-
 def get_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-ng', '--numberGraphics',
                         type=int,
                         help='Number of graphic cards which should be used.',
-                        default=2)
+                        default=1)
 
     parser.add_argument('-dt', '--direction',
                         type=str,
-                        help='States in which dircetion the training is done. Either DifToCrohn or CrohnToDif',
-                        default='CrohnToDif')
+                        help='States in which dircetion the training is done. Either NormalToAbnormal or AbnormalToNormal.',
+                        default='NormalToAbnormal')
 
     parser.add_argument('-logn', '--logname',
                         type=str,
@@ -22,72 +21,42 @@ def get_parser():
     parser.add_argument('-ln', '--lambdaNorm',
                         type=int,
                         help='Lambda Norm. Default is 10',
-                        default=100)
-
-    parser.add_argument('-ch', '--channel',
-                        type=int,
-                        help='States which channel is used if you only want to transform a single channel.',
-                        default=None)
-
-    parser.add_argument('-ep', '--epoch',
-                        type=int,
-                        help='Only use with a pretrained network. States at which epoch to continue the learning process.',
-                        default=0)
+                        default=10)
 
     parser.add_argument('-sig', '--sigmoid',
                         type=bool,
                         help='After addition of the map and the input, the sigmoid is added. This prevents negative numbers in the output',
                         default=False)
 
-    parser.add_argument('-1if', '--oneImage',
-                        type=str,
-                        help='Loads one full image at given path to analyse in tensorboard while training.',
-                        default=None)
-
-    parser.add_argument('-tor', '--torch',
-                        type=str,
-                        help='Using .pt data instead of .tif data',
-                        default=False)
-
     parser.add_argument('-pro', '--project',
                         type=str,
-                        help='Projectname in WandB.',
-                        default='cycleLogs')
+                        help='Projectname in WandB',
+                        default=None)
 
-    parser.add_argument('-dat', '--data',
+    parser.add_argument('-dat', '--data_dir',
                         type=str,
-                        help='folder of the preprocessed data',
-                        default='../../data/Preprocessed')
+                        help='folder of the data',
+                        default=None)
 
-    parser.add_argument('-datFu', '--dataFull',
+    parser.add_argument('-mf', '--model_folder',
                         type=str,
-                        help='folder of the preprocessed full image data',
-                        default='../../data/Preprocessed')
-
-    parser.add_argument('-exp', '--experiment',
+                        help='directory in where models will be saved',
+                        default='../Models/')
+    
+    parser.add_argument('-sf', '--save_folder', 
                         type=str,
-                        help='directory in where samples and models will be saved',
-                        default='../experiment')
-
-    parser.add_argument('-pre', '--pretrained',
-                        type=str,
-                        help='folder of the pretrained network',
+                        help='folder in which the images will be saved',
                         default=None)
 
     parser.add_argument('-bs', '--batch_size',
                         type=int,
                         help='input batch size',
-                        default=32)
-
-    parser.add_argument('-isize', '--image_size',
-                        type=int,
-                        help='the height / width of the input image to network',
-                        default=128)
+                        default=12)
 
     parser.add_argument('-nc', '--channels_number',
                         type=int,
                         help='input image channels',
-                        default=61)
+                        default=3)
 
     parser.add_argument('-ngf', '--num_filters_g',
                         type=int,
@@ -132,16 +101,26 @@ def get_parser():
     parser.add_argument('--train',
                         type=int,
                         help='percentage of the dataset for training',
-                        default=70)
+                        default=100)
 
     parser.add_argument('--eval',
                         type=int,
                         help='percentage of the dataset for evaluation',
-                        default=15)
+                        default=0)
                         
     parser.add_argument('--test',
                         type=int,
                         help='percentage of the dataset for testing',
-                        default=15)
+                        default=0)
+    
+    parser.add_argument('--encoder_name',
+                        type=str,
+                        help='name of the encoder. If None, the default UNet will be used',
+                        default="vaganEncoder")
+    
+    parser.add_argument('--critic_name',
+                        type=str,
+                        help='name of the critic. If None, the default C3DFCN will be used',
+                        default="C3DFCN")
 
     return parser
